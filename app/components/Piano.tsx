@@ -18,5 +18,14 @@ export const Piano = () => {
             newSynth.dispose()
         }
     }, [])
+
+    const playNote = (note: string) => {
+        if(!synth) return
+        Tone.start()
+        synth.triggerAttack(note)
+    }
+
 }
+
+
 
