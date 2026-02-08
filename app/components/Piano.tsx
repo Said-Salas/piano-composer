@@ -25,4 +25,8 @@ export const Piano = () => {
         synth.triggerAttack(note)
     }
 
+    const stopNote = (note: string) => {
+        if (!synth) return
+        synth.triggerRelease(note)
+    }
 }
