@@ -37,9 +37,18 @@ export const Piano = () => {
       {octaves.map(octave => (
         <div key={octave} className='flex shrink-0'>
           <Key note={`C${octave}`} blackNote={`C#${octave}`} onPlay={playNote} onStop={stopNote} />
-          <Key />
+          <Key note={`D${octave}`} blackNote={`D#${octave}`} onPlay={playNote} onStop={stopNote} />
+          <Key note={`E${octave}`} onPlay={playNote} onStop={stopNote} />
+          <Key note={`F${octave}`} blackNote={`F#${octave}`} onPlay={playNote} onStop={stopNote} />
+          <Key note={`G${octave}`} blackNote={`G#${octave}`} onPlay={playNote} onStop={stopNote} />
+          <Key note={`A${octave}`} blackNote={`A#${octave}`} onPlay={playNote} onStop={stopNote} />
+          <Key note={`B${octave}`} onPlay={playNote} onStop={stopNote} />
         </div>
       ))}
+      
+      <div className='flex shrink-0'>
+        <Key note='C7' onPlay={playNote} onStop={stopNote} />
+      </div>
     </div>
   )
 }
