@@ -34,25 +34,27 @@ export default function Piano() {
   };
 
   // Generate 4 octaves for the demo (C3 to B6)
-  const octaves = [3, 4, 5, 6];
+  const octaves = [2, 3, 4, 5, 6];
 
   return (
     <div className="flex overflow-x-auto p-4 bg-gray-900 min-h-[200px] items-center">
-      {octaves.map((octave) => (
-        <div key={octave} className="flex shrink-0">
-          {/* C Group */}
-          <Key note={`C${octave}`} blackNote={`C#${octave}`} onPlay={playNote} onStop={stopNote} />
-          <Key note={`D${octave}`} blackNote={`D#${octave}`} onPlay={playNote} onStop={stopNote} />
-          <Key note={`E${octave}`} onPlay={playNote} onStop={stopNote} />
-          
-          {/* F Group */}
-          <Key note={`F${octave}`} blackNote={`F#${octave}`} onPlay={playNote} onStop={stopNote} />
-          <Key note={`G${octave}`} blackNote={`G#${octave}`} onPlay={playNote} onStop={stopNote} />
-          <Key note={`A${octave}`} blackNote={`A#${octave}`} onPlay={playNote} onStop={stopNote} />
-          <Key note={`B${octave}`} onPlay={playNote} onStop={stopNote} />
-        </div>
-      ))}
+    
+    {octaves.map((octave) => (
+      <div key={octave} className="flex shrink-0">
+        <Key note={`C${octave}`} blackNote={`C#${octave}`} onPlay={playNote} onStop={stopNote} />
+        <Key note={`D${octave}`} blackNote={`D#${octave}`} onPlay={playNote} onStop={stopNote} />
+        <Key note={`E${octave}`} onPlay={playNote} onStop={stopNote} />
+        <Key note={`F${octave}`} blackNote={`F#${octave}`} onPlay={playNote} onStop={stopNote} />
+        <Key note={`G${octave}`} blackNote={`G#${octave}`} onPlay={playNote} onStop={stopNote} />
+        <Key note={`A${octave}`} blackNote={`A#${octave}`} onPlay={playNote} onStop={stopNote} />
+        <Key note={`B${octave}`} onPlay={playNote} onStop={stopNote} />
+      </div>
+    ))}
+
+    <div className="flex shrink-0">
+       <Key note="C7" onPlay={playNote} onStop={stopNote} />
     </div>
+  </div>
   );
 }
 
