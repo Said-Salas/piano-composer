@@ -38,7 +38,6 @@ export default function Piano() {
 
   return (
     <div className="flex overflow-x-auto p-4 bg-gray-900 min-h-[200px] items-center">
-    
     {octaves.map((octave) => (
       <div key={octave} className="flex shrink-0">
         <Key note={`C${octave}`} blackNote={`C#${octave}`} onPlay={playNote} onStop={stopNote} />
