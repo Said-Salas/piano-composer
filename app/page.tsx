@@ -13,6 +13,7 @@ export default function Home() {
     initializeAudio,
     startRecording,
     stopRecording,
+    updateNote
   } = useAudioRecorder();
 
   return (
@@ -63,10 +64,15 @@ export default function Home() {
       <div className="w-full max-w-5xl flex flex-col gap-8 flex-1">
         {/* Timeline Section */}
         <section className="flex flex-col gap-2">
-          <h2 className="text-gray-400 text-sm uppercase tracking-wider font-semibold ml-1">
-            Timeline
-          </h2>
-          <Timeline notes={notes} />
+          <div className="flex justify-between items-end">
+            <h2 className="text-gray-400 text-sm uppercase tracking-wider font-semibold ml-1">
+              Timeline
+            </h2>
+            <p className="text-xs text-gray-600">
+              Drag right edge of notes to resize
+            </p>
+          </div>
+          <Timeline notes={notes} onUpdateNote={updateNote} />
         </section>
 
         {/* Piano Section */}

@@ -70,6 +70,14 @@ export function useAudioRecorder() {
     isRecordingRef.current = false;
   }, []);
 
+  const updateNote = useCallback((id: string, updates: Partial<Note>) => {
+    setNotes(prevNotes => 
+      prevNotes.map(note => 
+        note.id === id ? { ...note, ...updates } : note
+      )
+    );
+  }, []);
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -90,5 +98,6 @@ export function useAudioRecorder() {
     initializeAudio,
     startRecording,
     stopRecording,
+    updateNote
   };
 }

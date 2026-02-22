@@ -6,6 +6,7 @@ export class NoteRecorder {
   private activeNote: { pitch: string; startTime: number } | null = null;
   private notes: Note[] = [];
   private onNoteRecorded: ((note: Note) => void) | null = null;
+  private defaultDuration: number = 1000; // 1 second default duration
 
   constructor(onNoteRecorded?: (note: Note) => void) {
     this.onNoteRecorded = onNoteRecorded || null;
@@ -19,7 +20,7 @@ export class NoteRecorder {
   }
 
   stop() {
-    this.finishActiveNote();
+    this.activeNote = null; // Just clear active note, don't record it if it's hanging
     this.isRecording = false;
     return this.notes;
   }
@@ -33,53 +34,45 @@ export class NoteRecorder {
 
     // If we have an active note
     if (this.activeNote) {
-      // If the detected note is different (or null/silence), finish the active note
+      // If the detected note is different (or null/silence), we consider the previous note "finished"
+      // BUT per requirements, we don't care about the release time for duration.
+      // We just need to stop tracking it so we can start a new one if needed.
       if (detectedNote !== this.activeNote.pitch) {
-        this.finishActiveNote(currentTime);
+        this.activeNote = null;
         
-        // If the new detection is a valid note, start a new one
+        // If the new detection is a valid note, start a new one immediately
         if (detectedNote) {
-          this.startNewNote(detectedNote, relativeTime);
+          this.recordNewNote(detectedNote, relativeTime);
         }
       }
       // If detectedNote is the same, we just continue (do nothing)
     } else {
       // No active note, but we detected one -> start it
       if (detectedNote) {
-        this.startNewNote(detectedNote, relativeTime);
+        this.recordNewNote(detectedNote, relativeTime);
       }
     }
   }
 
-  private startNewNote(pitch: string, startTime: number) {
+  private recordNewNote(pitch: string, startTime: number) {
+    // Immediately create and emit the note with fixed duration
+    const newNote: Note = {
+      id: crypto.randomUUID(),
+      pitch,
+      startTime,
+      duration: this.defaultDuration
+    };
+
+    this.notes.push(newNote);
+    if (this.onNoteRecorded) {
+      this.onNoteRecorded(newNote);
+    }
+
+    // Set as active so we don't re-trigger it while holding
     this.activeNote = {
       pitch,
       startTime
     };
-  }
-
-  private finishActiveNote(endTime: number = performance.now()) {
-    if (!this.activeNote) return;
-
-    const duration = endTime - (this.startTime + this.activeNote.startTime);
-    
-    // Filter out very short blips (e.g. < 50ms) if desired, 
-    // but the stabilizer should have handled most jitter.
-    if (duration > 50) {
-      const newNote: Note = {
-        id: crypto.randomUUID(),
-        pitch: this.activeNote.pitch,
-        startTime: this.activeNote.startTime,
-        duration: duration
-      };
-
-      this.notes.push(newNote);
-      if (this.onNoteRecorded) {
-        this.onNoteRecorded(newNote);
-      }
-    }
-
-    this.activeNote = null;
   }
 
   getNotes() {
