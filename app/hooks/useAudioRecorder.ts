@@ -3,6 +3,7 @@ import { AudioPitchAnalyzer } from "../lib/audio/pitch";
 import { MonophonicNoteDetector } from "../lib/audio/note-stabilizer";
 import { NoteRecorder } from "../lib/recording/note-recorder";
 import { Note } from "../types";
+import { supabase } from "../lib/supabase";
 
 export function useAudioRecorder() {
   const [isAudioReady, setIsAudioReady] = useState(false);
@@ -32,6 +33,9 @@ export function useAudioRecorder() {
       await analyzerRef.current.start();
       setIsAudioReady(true);
       
+      // Persist state
+      localStorage.setItem("mic_enabled", "true");
+      
       // Start the loop
       const loop = () => {
         if (!analyzerRef.current || !detectorRef.current) return;
@@ -52,8 +56,23 @@ export function useAudioRecorder() {
     } catch (err) {
       console.error("Failed to initialize audio:", err);
       setIsAudioReady(false);
+      localStorage.removeItem("mic_enabled");
     }
   }, []);
+
+  // Auto-start if previously enabled and user is logged in
+  useEffect(() => {
+    const checkAutoStart = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const micEnabled = localStorage.getItem("mic_enabled");
+      
+      if (session?.user && micEnabled === "true") {
+        initializeAudio();
+      }
+    };
+    
+    checkAutoStart();
+  }, [initializeAudio]);
 
   const startRecording = useCallback(() => {
     if (!recorderRef.current) return;
@@ -95,6 +114,7 @@ export function useAudioRecorder() {
     isRecording,
     detectedNote,
     notes,
+    setNotes, // Export setNotes for loading songs
     initializeAudio,
     startRecording,
     stopRecording,

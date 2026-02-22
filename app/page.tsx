@@ -3,6 +3,8 @@
 import { useAudioRecorder } from "./hooks/useAudioRecorder";
 import Piano from "./components/Piano";
 import Timeline from "./components/Timeline";
+import { AuthButton } from "./components/AuthButton";
+import { SongManager } from "./components/SongManager";
 
 export default function Home() {
   const {
@@ -10,6 +12,7 @@ export default function Home() {
     isRecording,
     detectedNote,
     notes,
+    setNotes,
     initializeAudio,
     startRecording,
     stopRecording,
@@ -19,10 +22,16 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-black text-white gap-8 font-sans">
       <header className="w-full max-w-5xl flex justify-between items-center border-b border-gray-800 pb-4">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-          Piano Composer
-        </h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+            Piano Composer
+          </h1>
+          <SongManager currentNotes={notes} onLoadSong={setNotes} />
+        </div>
+        
         <div className="flex gap-4 items-center">
+          <AuthButton />
+          
           {!isAudioReady ? (
             <button
               onClick={initializeAudio}
@@ -31,7 +40,7 @@ export default function Home() {
               Enable Microphone
             </button>
           ) : (
-            <div className="flex gap-4 items-center">
+            <div className="flex gap-4 items-center pl-4 border-l border-gray-800">
               <div className="flex items-center gap-2 px-3 py-1 bg-gray-900 rounded-full border border-gray-700">
                 <div className={`w-2 h-2 rounded-full ${detectedNote ? "bg-green-500 animate-pulse" : "bg-gray-600"}`} />
                 <span className="text-sm font-mono text-gray-400 w-8 text-center">
