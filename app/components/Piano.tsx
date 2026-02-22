@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import * as Tone from "tone";
+import { getNoteColor } from "../lib/audio/note-utils";
 
-export default function Piano() {
+interface PianoProps {
+  highlightedNote?: string | null;
+}
+
+export default function Piano({ highlightedNote }: PianoProps) {
   const [synth, setSynth] = useState<Tone.PolySynth | null>(null);
 
   // Initialize Audio Engine
@@ -37,21 +42,66 @@ export default function Piano() {
   const octaves = [2, 3, 4, 5, 6];
 
   return (
-    <div className="flex overflow-x-auto p-4 bg-gray-900 min-h-[200px] items-center">
+    <div className="flex flex-wrap justify-center p-4 bg-gray-900 rounded-xl border border-gray-800 shadow-xl gap-y-4">
     {octaves.map((octave) => (
-      <div key={octave} className="flex shrink-0">
-        <Key note={`C${octave}`} blackNote={`C#${octave}`} onPlay={playNote} onStop={stopNote} />
-        <Key note={`D${octave}`} blackNote={`D#${octave}`} onPlay={playNote} onStop={stopNote} />
-        <Key note={`E${octave}`} onPlay={playNote} onStop={stopNote} />
-        <Key note={`F${octave}`} blackNote={`F#${octave}`} onPlay={playNote} onStop={stopNote} />
-        <Key note={`G${octave}`} blackNote={`G#${octave}`} onPlay={playNote} onStop={stopNote} />
-        <Key note={`A${octave}`} blackNote={`A#${octave}`} onPlay={playNote} onStop={stopNote} />
-        <Key note={`B${octave}`} onPlay={playNote} onStop={stopNote} />
+      <div key={octave} className="flex shrink-0 relative">
+        <Key 
+          note={`C${octave}`} 
+          blackNote={`C#${octave}`} 
+          onPlay={playNote} 
+          onStop={stopNote} 
+          highlightedNote={highlightedNote}
+        />
+        <Key 
+          note={`D${octave}`} 
+          blackNote={`D#${octave}`} 
+          onPlay={playNote} 
+          onStop={stopNote} 
+          highlightedNote={highlightedNote}
+        />
+        <Key 
+          note={`E${octave}`} 
+          onPlay={playNote} 
+          onStop={stopNote} 
+          highlightedNote={highlightedNote}
+        />
+        <Key 
+          note={`F${octave}`} 
+          blackNote={`F#${octave}`} 
+          onPlay={playNote} 
+          onStop={stopNote} 
+          highlightedNote={highlightedNote}
+        />
+        <Key 
+          note={`G${octave}`} 
+          blackNote={`G#${octave}`} 
+          onPlay={playNote} 
+          onStop={stopNote} 
+          highlightedNote={highlightedNote}
+        />
+        <Key 
+          note={`A${octave}`} 
+          blackNote={`A#${octave}`} 
+          onPlay={playNote} 
+          onStop={stopNote} 
+          highlightedNote={highlightedNote}
+        />
+        <Key 
+          note={`B${octave}`} 
+          onPlay={playNote} 
+          onStop={stopNote} 
+          highlightedNote={highlightedNote}
+        />
       </div>
     ))}
 
-    <div className="flex shrink-0">
-       <Key note="C7" onPlay={playNote} onStop={stopNote} />
+    <div className="flex shrink-0 relative">
+       <Key 
+         note="C7" 
+         onPlay={playNote} 
+         onStop={stopNote} 
+         highlightedNote={highlightedNote}
+       />
     </div>
   </div>
   );
@@ -63,28 +113,45 @@ function Key({
   blackNote,
   onPlay,
   onStop,
+  highlightedNote,
 }: {
   note: string;
   blackNote?: string;
   onPlay: (n: string) => void;
   onStop: (n: string) => void;
+  highlightedNote?: string | null;
 }) {
+  const isWhiteActive = highlightedNote === note;
+  const isBlackActive = highlightedNote === blackNote;
+  
+  // Get dynamic color for active state
+  const whiteActiveColor = getNoteColor(note);
+  const blackActiveColor = blackNote ? getNoteColor(blackNote) : "";
+
+  // We need to map the Tailwind classes to actual colors for the shadow/border if we want to match exactly,
+  // but for now let's just use the bg color class.
+  // Note: Tailwind classes like "bg-purple-500" work directly.
+  
   return (
     <div className="relative">
       {/* White Key */}
       <button
-        className="w-12 h-40 bg-white border border-gray-300 rounded-b-md active:bg-gray-200 flex items-end justify-center pb-2 z-10 hover:bg-gray-50"
+        className={`w-10 h-32 md:w-12 md:h-40 border border-gray-300 rounded-b-md active:bg-gray-200 flex items-end justify-center pb-2 z-10 hover:bg-gray-50 transition-all duration-75 ${
+          isWhiteActive ? `${whiteActiveColor} text-white border-transparent transform scale-[0.98]` : "bg-white text-gray-500"
+        }`}
         onMouseDown={() => onPlay(note)}
         onMouseUp={() => onStop(note)}
         onMouseLeave={() => onStop(note)}
       >
-        <span className="text-gray-500 text-xs font-bold">{note}</span>
+        <span className="text-xs font-bold">{note}</span>
       </button>
 
       {/* Black Key (Overlay) */}
       {blackNote && (
         <button
-          className="absolute w-8 h-24 bg-black border border-gray-800 rounded-b-sm z-20 top-0 -right-4 active:bg-gray-800"
+          className={`absolute w-6 h-20 md:w-8 md:h-24 border border-gray-800 rounded-b-sm z-20 top-0 -right-3 md:-right-4 active:bg-gray-800 transition-all duration-75 ${
+            isBlackActive ? `${blackActiveColor} border-transparent transform scale-[0.98]` : "bg-black"
+          }`}
           onMouseDown={(e) => {
             e.stopPropagation(); // Prevent triggering the white key
             onPlay(blackNote);
