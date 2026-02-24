@@ -54,6 +54,24 @@ export class NoteRecorder {
     }
   }
 
+  // Manually record a note (e.g. from digital piano click)
+  recordManualNote(pitch: string) {
+    if (!this.isRecording) return;
+    
+    const currentTime = performance.now();
+    const relativeTime = currentTime - this.startTime;
+    
+    // Just record it immediately as a discrete event
+    // We don't need to track "active note" state for manual clicks as they are instantaneous triggers
+    this.recordNewNote(pitch, relativeTime);
+    
+    // Reset active note so we don't conflict with mic input immediately
+    // actually, we should probably leave activeNote alone if it came from mic?
+    // But if we click a key, we probably want it to register.
+    // Let's just fire and forget for manual notes.
+    this.activeNote = null; 
+  }
+
   private recordNewNote(pitch: string, startTime: number) {
     // Immediately create and emit the note with fixed duration
     const newNote: Note = {

@@ -10,6 +10,7 @@ export function useAudioRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const [detectedNote, setDetectedNote] = useState<string | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [volume, setVolume] = useState(0);
 
   const analyzerRef = useRef<AudioPitchAnalyzer | null>(null);
   const detectorRef = useRef<MonophonicNoteDetector | null>(null);
@@ -41,6 +42,12 @@ export function useAudioRecorder() {
         if (!analyzerRef.current || !detectorRef.current) return;
 
         const { frequency, clarity } = analyzerRef.current.getPitch();
+        
+        // Simple volume estimation for visual feedback
+        // We can get this from the clarity or add a method to analyzer
+        // For now, let's use clarity as a proxy for signal strength/quality
+        setVolume(clarity);
+
         const stableNote = detectorRef.current.process(frequency, clarity);
 
         setDetectedNote(stableNote);
@@ -97,6 +104,39 @@ export function useAudioRecorder() {
     );
   }, []);
 
+  // Manual note addition (for digital piano)
+  const addManualNote = useCallback((pitch: string) => {
+    if (!isRecordingRef.current || !recorderRef.current) return;
+    
+    // Simulate a detected note for the recorder
+    // We need to simulate "Note On" then "Note Off"
+    // But since our recorder is designed for continuous stream, 
+    // we can just directly inject a note into the notes array
+    // OR we can feed the recorder.
+    
+    // Better: use the recorder's internal logic if possible, or just bypass it for manual triggers
+    // Since digital keys are instantaneous "presses", we can just add a note with default duration
+    
+    const newNote: Note = {
+      id: crypto.randomUUID(),
+      pitch,
+      startTime: performance.now() - (recorderRef.current['startTime'] || 0), // Hacky access to private prop? No.
+      duration: 1000 // Default duration
+    };
+    
+    // Actually, we should just use the setNotes directly if we are recording
+    // But we need the correct relative start time
+    
+    // Let's expose a public method on recorder or just duplicate the logic
+    // The recorder tracks start time.
+    
+    // Let's just feed the recorder "process" with the note for a few frames? No.
+    
+    // Let's add a public method to recorder: recordManualNote(pitch)
+    recorderRef.current.recordManualNote(pitch);
+    
+  }, []);
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -114,10 +154,12 @@ export function useAudioRecorder() {
     isRecording,
     detectedNote,
     notes,
-    setNotes, // Export setNotes for loading songs
+    volume,
+    setNotes,
     initializeAudio,
     startRecording,
     stopRecording,
-    updateNote
+    updateNote,
+    addManualNote
   };
 }

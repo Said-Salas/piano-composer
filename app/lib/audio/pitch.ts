@@ -55,11 +55,11 @@ export class AudioPitchAnalyzer {
   getPitch(): { frequency: number; clarity: number } {
     if (!this.analyser) return { frequency: 0, clarity: 0 };
 
-    this.analyser.getFloatTimeDomainData(this.buffer);
+    this.analyser.getFloatTimeDomainData(this.buffer as any);
     return this.autoCorrelate(this.buffer, this.sampleRate);
   }
 
-  private autoCorrelate(buffer: Float32Array, sampleRate: number): { frequency: number; clarity: number } {
+  private autoCorrelate(buffer: any, sampleRate: number): { frequency: number; clarity: number } {
     const SIZE = buffer.length;
     let sumOfSquares = 0;
     for (let i = 0; i < SIZE; i++) {

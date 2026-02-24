@@ -6,9 +6,10 @@ import { getNoteColor } from "../lib/audio/note-utils";
 
 interface PianoProps {
   highlightedNote?: string | null;
+  onNotePlay?: (note: string) => void;
 }
 
-export default function Piano({ highlightedNote }: PianoProps) {
+export default function Piano({ highlightedNote, onNotePlay }: PianoProps) {
   const [sampler, setSampler] = useState<Tone.Sampler | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,6 +69,10 @@ export default function Piano({ highlightedNote }: PianoProps) {
     // Tone.start() is required by browsers on first interaction
     Tone.start(); 
     sampler.triggerAttack(note);
+    
+    if (onNotePlay) {
+      onNotePlay(note);
+    }
   };
 
   const stopNote = (note: string) => {
