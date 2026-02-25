@@ -2,12 +2,16 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { AudioPitchAnalyzer } from "../lib/audio/pitch";
 import { MonophonicNoteDetector } from "../lib/audio/note-stabilizer";
 import { NoteRecorder } from "../lib/recording/note-recorder";
+import { SongPlayer } from "../lib/audio/player";
 import { Note } from "../types";
 import { supabase } from "../lib/supabase";
+import * as Tone from "tone";
 
 export function useAudioRecorder() {
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackTime, setPlaybackTime] = useState(0);
   const [detectedNote, setDetectedNote] = useState<string | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [volume, setVolume] = useState(0);
@@ -15,10 +19,13 @@ export function useAudioRecorder() {
   const analyzerRef = useRef<AudioPitchAnalyzer | null>(null);
   const detectorRef = useRef<MonophonicNoteDetector | null>(null);
   const recorderRef = useRef<NoteRecorder | null>(null);
+  const playerRef = useRef<SongPlayer | null>(null);
+  const samplerRef = useRef<Tone.Sampler | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
   // Use a ref to track recording state inside the animation loop
   const isRecordingRef = useRef(false);
+  const isPlayingRef = useRef(false);
 
   // Initialize audio engine
   const initializeAudio = useCallback(async () => {
@@ -31,6 +38,24 @@ export function useAudioRecorder() {
         setNotes((prev) => [...prev, note]);
       });
 
+      // Initialize Sampler for playback
+      samplerRef.current = new Tone.Sampler({
+        urls: {
+          A0: "A0.mp3", C1: "C1.mp3", "D#1": "Ds1.mp3", "F#1": "Fs1.mp3", A1: "A1.mp3",
+          C2: "C2.mp3", "D#2": "Ds2.mp3", "F#2": "Fs2.mp3", A2: "A2.mp3",
+          C3: "C3.mp3", "D#3": "Ds3.mp3", "F#3": "Fs3.mp3", A3: "A3.mp3",
+          C4: "C4.mp3", "D#4": "Ds4.mp3", "F#4": "Fs4.mp3", A4: "A4.mp3",
+          C5: "C5.mp3", "D#5": "Ds5.mp3", "F#5": "Fs5.mp3", A5: "A5.mp3",
+          C6: "C6.mp3", "D#6": "Ds6.mp3", "F#6": "Fs6.mp3", A6: "A6.mp3",
+          C7: "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3", A7: "A7.mp3",
+          C8: "C8.mp3"
+        },
+        release: 1,
+        baseUrl: "https://tonejs.github.io/audio/salamander/",
+      }).toDestination();
+
+      playerRef.current = new SongPlayer(samplerRef.current);
+
       await analyzerRef.current.start();
       setIsAudioReady(true);
       
@@ -39,17 +64,26 @@ export function useAudioRecorder() {
       
       // Start the loop
       const loop = () => {
-        if (!analyzerRef.current || !detectorRef.current) return;
+        // Update playback time if playing
+        if (isPlayingRef.current) {
+          setPlaybackTime(Tone.Transport.seconds);
+        } else if (Tone.Transport.state !== "started" && playbackTime !== 0) {
+          // Reset if stopped externally or finished
+          // Actually, let's keep the last position or reset?
+          // For now, reset to 0 when not playing is simpler for UI
+          // But we need to be careful not to flicker.
+          // Let's just rely on isPlaying state to reset in the UI or here.
+        }
+
+        if (!analyzerRef.current || !detectorRef.current) {
+           animationFrameRef.current = requestAnimationFrame(loop);
+           return;
+        }
 
         const { frequency, clarity } = analyzerRef.current.getPitch();
-        
-        // Simple volume estimation for visual feedback
-        // We can get this from the clarity or add a method to analyzer
-        // For now, let's use clarity as a proxy for signal strength/quality
         setVolume(clarity);
 
         const stableNote = detectorRef.current.process(frequency, clarity);
-
         setDetectedNote(stableNote);
 
         if (recorderRef.current && isRecordingRef.current) {
@@ -96,6 +130,25 @@ export function useAudioRecorder() {
     isRecordingRef.current = false;
   }, []);
 
+  const playSong = useCallback(async () => {
+    if (!playerRef.current || notes.length === 0) return;
+    setIsPlaying(true);
+    isPlayingRef.current = true;
+    await playerRef.current.play(notes, () => {
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      setPlaybackTime(0);
+    });
+  }, [notes]);
+
+  const stopSong = useCallback(() => {
+    if (!playerRef.current) return;
+    playerRef.current.stop();
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    setPlaybackTime(0);
+  }, []);
+
   const updateNote = useCallback((id: string, updates: Partial<Note>) => {
     setNotes(prevNotes => 
       prevNotes.map(note => 
@@ -104,37 +157,9 @@ export function useAudioRecorder() {
     );
   }, []);
 
-  // Manual note addition (for digital piano)
   const addManualNote = useCallback((pitch: string) => {
     if (!isRecordingRef.current || !recorderRef.current) return;
-    
-    // Simulate a detected note for the recorder
-    // We need to simulate "Note On" then "Note Off"
-    // But since our recorder is designed for continuous stream, 
-    // we can just directly inject a note into the notes array
-    // OR we can feed the recorder.
-    
-    // Better: use the recorder's internal logic if possible, or just bypass it for manual triggers
-    // Since digital keys are instantaneous "presses", we can just add a note with default duration
-    
-    const newNote: Note = {
-      id: crypto.randomUUID(),
-      pitch,
-      startTime: performance.now() - (recorderRef.current['startTime'] || 0), // Hacky access to private prop? No.
-      duration: 1000 // Default duration
-    };
-    
-    // Actually, we should just use the setNotes directly if we are recording
-    // But we need the correct relative start time
-    
-    // Let's expose a public method on recorder or just duplicate the logic
-    // The recorder tracks start time.
-    
-    // Let's just feed the recorder "process" with the note for a few frames? No.
-    
-    // Let's add a public method to recorder: recordManualNote(pitch)
     recorderRef.current.recordManualNote(pitch);
-    
   }, []);
 
   // Cleanup
@@ -146,12 +171,20 @@ export function useAudioRecorder() {
       if (analyzerRef.current) {
         analyzerRef.current.stop();
       }
+      if (playerRef.current) {
+        playerRef.current.stop();
+      }
+      if (samplerRef.current) {
+        samplerRef.current.dispose();
+      }
     };
   }, []);
 
   return {
     isAudioReady,
     isRecording,
+    isPlaying,
+    playbackTime,
     detectedNote,
     notes,
     volume,
@@ -159,6 +192,8 @@ export function useAudioRecorder() {
     initializeAudio,
     startRecording,
     stopRecording,
+    playSong,
+    stopSong,
     updateNote,
     addManualNote
   };

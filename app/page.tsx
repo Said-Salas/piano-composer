@@ -10,6 +10,8 @@ export default function Home() {
   const {
     isAudioReady,
     isRecording,
+    isPlaying,
+    playbackTime,
     detectedNote,
     notes,
     volume,
@@ -17,6 +19,8 @@ export default function Home() {
     initializeAudio,
     startRecording,
     stopRecording,
+    playSong,
+    stopSong,
     updateNote,
     addManualNote
   } = useAudioRecorder();
@@ -65,10 +69,39 @@ export default function Home() {
                 </span>
               </div>
               
+              {/* Playback Controls */}
+              {notes.length > 0 && !isRecording && (
+                <div className="flex gap-2">
+                  {!isPlaying ? (
+                    <button
+                      onClick={playSong}
+                      className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-full font-medium transition-colors flex items-center gap-2 border border-gray-700"
+                    >
+                      <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      Play
+                    </button>
+                  ) : (
+                    <button
+                      onClick={stopSong}
+                      className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-full font-medium transition-colors flex items-center gap-2 border border-gray-700"
+                    >
+                      <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 6h12v12H6z" />
+                      </svg>
+                      Stop
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Recording Controls */}
               {!isRecording ? (
                 <button
                   onClick={startRecording}
-                  className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded-full font-medium transition-colors flex items-center gap-2"
+                  disabled={isPlaying}
+                  className={`px-6 py-2 bg-red-600 hover:bg-red-500 rounded-full font-medium transition-colors flex items-center gap-2 ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div className="w-3 h-3 bg-white rounded-full" />
                   Record
@@ -98,7 +131,7 @@ export default function Home() {
               Drag right edge of notes to resize
             </p>
           </div>
-          <Timeline notes={notes} onUpdateNote={updateNote} />
+          <Timeline notes={notes} playbackTime={playbackTime} onUpdateNote={updateNote} />
         </section>
 
         {/* Piano Section */}

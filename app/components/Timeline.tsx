@@ -4,10 +4,11 @@ import { getNoteColor, noteNameToMidi } from "../lib/audio/note-utils";
 
 interface TimelineProps {
   notes: Note[];
+  playbackTime?: number;
   onUpdateNote?: (id: string, updates: Partial<Note>) => void;
 }
 
-export default function Timeline({ notes, onUpdateNote }: TimelineProps) {
+export default function Timeline({ notes, playbackTime = 0, onUpdateNote }: TimelineProps) {
   // Constants
   const PIXELS_PER_SECOND = 100;
   const ROW_HEIGHT = 40; // Taller rows for better visibility
@@ -23,6 +24,23 @@ export default function Timeline({ notes, onUpdateNote }: TimelineProps) {
   const resizeStartXRef = useRef<number>(0);
   const resizeStartDurationRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll logic
+  useEffect(() => {
+    if (playbackTime > 0 && containerRef.current) {
+      const cursorX = playbackTime * PIXELS_PER_SECOND;
+      const containerWidth = containerRef.current.clientWidth;
+      const scrollLeft = containerRef.current.scrollLeft;
+      
+      // If cursor is near the right edge or off-screen, scroll
+      if (cursorX > scrollLeft + containerWidth * 0.8) {
+        containerRef.current.scrollTo({ left: cursorX - containerWidth * 0.2, behavior: 'smooth' });
+      } else if (cursorX < scrollLeft) {
+        // If cursor jumps back (loop/restart)
+        containerRef.current.scrollTo({ left: cursorX - containerWidth * 0.2, behavior: 'smooth' });
+      }
+    }
+  }, [playbackTime]);
 
   // Handle resize
   const handleResizeStart = (e: React.MouseEvent, note: Note) => {
@@ -104,6 +122,16 @@ export default function Timeline({ notes, onUpdateNote }: TimelineProps) {
             </span>
           </div>
         ))}
+
+        {/* Playback Cursor */}
+        {playbackTime > 0 && (
+          <div 
+            className="absolute top-0 bottom-0 w-[2px] bg-red-500 z-50 pointer-events-none shadow-[0_0_10px_rgba(239,68,68,0.8)]"
+            style={{ left: `${playbackTime * PIXELS_PER_SECOND}px` }}
+          >
+            <div className="absolute -top-1 -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full shadow-md" />
+          </div>
+        )}
 
         {/* Notes */}
         {notes.map((note) => {
