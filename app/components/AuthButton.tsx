@@ -68,11 +68,12 @@ export function AuthButton() {
   return (
     <div className="flex items-center gap-4">
       <div className="flex items-center gap-2">
-        {user.user_metadata.avatar_url && (
+        {(user.user_metadata.avatar_url || user.user_metadata.picture) && (
           <img
-            src={user.user_metadata.avatar_url}
+            src={user.user_metadata.avatar_url || user.user_metadata.picture}
             alt={user.user_metadata.full_name}
             className="w-8 h-8 rounded-full border border-gray-700"
+            referrerPolicy="no-referrer"
           />
         )}
         <span className="text-sm text-gray-300 hidden sm:inline">

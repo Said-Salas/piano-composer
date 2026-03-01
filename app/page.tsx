@@ -47,21 +47,6 @@ export default function Home() {
             </button>
           ) : (
             <div className="flex gap-4 items-center pl-4 border-l border-gray-800">
-              {/* Mic Visualizer */}
-              <div className="flex flex-col gap-1 items-center mr-2" title="Microphone Level">
-                <div className="flex gap-0.5 items-end h-6">
-                  {[...Array(5)].map((_, i) => (
-                    <div 
-                      key={i} 
-                      className={`w-1 rounded-t-sm transition-all duration-75 ${
-                        volume > i * 0.2 ? "bg-green-500" : "bg-gray-800"
-                      }`}
-                      style={{ height: `${20 + i * 20}%` }}
-                    />
-                  ))}
-                </div>
-              </div>
-
               <div className="flex items-center gap-2 px-3 py-1 bg-gray-900 rounded-full border border-gray-700">
                 <div className={`w-2 h-2 rounded-full ${detectedNote ? "bg-green-500 animate-pulse" : "bg-gray-600"}`} />
                 <span className="text-sm font-mono text-gray-400 w-8 text-center">

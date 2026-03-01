@@ -49,7 +49,7 @@ export default function Piano({ highlightedNote, onNotePlay }: PianoProps) {
         A7: "A7.mp3",
         C8: "C8.mp3"
       },
-      release: 1,
+      release: 4,
       baseUrl: "https://tonejs.github.io/audio/salamander/",
       onload: () => {
         setIsLoaded(true);

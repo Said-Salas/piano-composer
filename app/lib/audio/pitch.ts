@@ -6,9 +6,8 @@ export class AudioPitchAnalyzer {
   private sampleRate: number = 44100;
 
   constructor() {
-    // Increased buffer size to 4096 to better detect low frequencies (bass notes)
-    // 4096 samples @ 44.1kHz = ~93ms window
-    this.buffer = new Float32Array(4096);
+    // 2048 samples @ 44.1kHz = ~46ms window. Good balance for fast high notes and low notes down to ~45Hz
+    this.buffer = new Float32Array(2048);
   }
 
   async start(): Promise<void> {
@@ -19,18 +18,41 @@ export class AudioPitchAnalyzer {
     this.sampleRate = this.audioContext.sampleRate;
     
     try {
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({ 
+      // First, get basic permission to read device labels
+      let tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Enumerate devices to find the built-in MacBook microphone
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+      
+      const builtInMic = audioInputs.find(d => 
+        d.label.toLowerCase().includes('built-in') || 
+        d.label.toLowerCase().includes('macbook')
+      );
+      
+      let targetDeviceId = builtInMic?.deviceId;
+      
+      // Stop the temporary stream
+      tempStream.getTracks().forEach(t => t.stop());
+
+      const constraints: any = {
         audio: {
           echoCancellation: false,
           autoGainControl: false,
           noiseSuppression: false,
           channelCount: 1
-        } 
-      });
+        }
+      };
+      
+      if (targetDeviceId) {
+        constraints.audio.deviceId = { exact: targetDeviceId };
+      }
+
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       
       const source = this.audioContext.createMediaStreamSource(this.mediaStream);
       this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 4096; // Matches buffer size
+      this.analyser.fftSize = 2048; // Matches buffer size
       source.connect(this.analyser);
       
       this.buffer = new Float32Array(this.analyser.fftSize);
@@ -56,10 +78,10 @@ export class AudioPitchAnalyzer {
     if (!this.analyser) return { frequency: 0, clarity: 0 };
 
     this.analyser.getFloatTimeDomainData(this.buffer as any);
-    return this.autoCorrelate(this.buffer, this.sampleRate);
+    return this.mpmPitchDetection(this.buffer, this.sampleRate);
   }
 
-  private autoCorrelate(buffer: any, sampleRate: number): { frequency: number; clarity: number } {
+  private mpmPitchDetection(buffer: Float32Array, sampleRate: number): { frequency: number; clarity: number } {
     const SIZE = buffer.length;
     let sumOfSquares = 0;
     for (let i = 0; i < SIZE; i++) {
@@ -68,91 +90,102 @@ export class AudioPitchAnalyzer {
     }
     const rootMeanSquare = Math.sqrt(sumOfSquares / SIZE);
 
-    // Lowered RMS threshold to detect quieter notes (especially high/low ends)
-    if (rootMeanSquare < 0.005) { 
+    // Increased RMS threshold to ignore typing and background noise
+    if (rootMeanSquare < 0.003) { 
       return { frequency: -1, clarity: 0 };
     }
 
-    // Autocorrelation
-    // We only correlate the first half to ensure we have enough overlap
-    const MAX_SAMPLES = Math.floor(SIZE / 2);
-    const correlations = new Float32Array(MAX_SAMPLES);
+    const halfSize = Math.floor(SIZE / 2);
+    const nsdf = new Float32Array(halfSize);
 
-    for (let offset = 0; offset < MAX_SAMPLES; offset++) {
-      let correlation = 0;
-      // Unrolled loop or optimized math could go here, but JS engines are decent
-      for (let i = 0; i < MAX_SAMPLES; i++) {
-        correlation += buffer[i] * buffer[i + offset];
+    for (let tau = 0; tau < halfSize; tau++) {
+      let acf = 0;
+      let m = 0;
+      for (let i = 0; i < halfSize; i++) {
+        const val1 = buffer[i];
+        const val2 = buffer[i + tau];
+        acf += val1 * val2;
+        m += val1 * val1 + val2 * val2;
       }
-      correlations[offset] = correlation;
+      nsdf[tau] = m === 0 ? 0 : (2 * acf) / m;
     }
 
-    // Normalize
-    const maxCorrelation = correlations[0];
-    if (maxCorrelation > 0.00001) {
-        for (let i = 0; i < MAX_SAMPLES; i++) {
-            correlations[i] /= maxCorrelation;
-        }
-    }
-
-    // Find first peak
-    // We skip the main lobe at lag 0. We look for the first descent, then the first ascent.
-    let d = 0;
-    while (correlations[d] > correlations[d + 1] && d < MAX_SAMPLES - 1) d++;
+    let maxPositions: number[] = [];
+    let pos = 0;
     
-    // Find the max peak in the rest of the buffer
-    let maxval = -1, maxpos = -1;
-    for (let i = d; i < MAX_SAMPLES; i++) {
-      if (correlations[i] > maxval) {
-        maxval = correlations[i];
-        maxpos = i;
+    // Skip the first positive lobe (the lag=0 peak)
+    while (pos < halfSize - 1 && nsdf[pos] > 0) {
+      pos++;
+    }
+
+    while (pos < halfSize - 1) {
+      // Find next positive zero crossing
+      while (pos < halfSize - 1 && nsdf[pos] <= 0) {
+        pos++;
+      }
+      if (pos >= halfSize - 1) break;
+
+      let curMaxPos = pos;
+      // Find the peak in this positive lobe
+      while (pos < halfSize - 1 && nsdf[pos] > 0) {
+        if (nsdf[pos] > nsdf[curMaxPos]) {
+          curMaxPos = pos;
+        }
+        pos++;
+      }
+      
+      maxPositions.push(curMaxPos);
+    }
+
+    if (maxPositions.length === 0) {
+      return { frequency: -1, clarity: 0 };
+    }
+
+    let highestPeakVal = -1;
+    for (const p of maxPositions) {
+      if (nsdf[p] > highestPeakVal) {
+        highestPeakVal = nsdf[p];
       }
     }
-    
-    // Octave Error Correction (Fix for B5 -> E4)
-    // Sometimes the fundamental is weaker than the first harmonic (octave up)
-    // or sub-harmonics appear stronger.
-    // We check if there are significant peaks at integer fractions of the maxpos (T0).
-    // E.g. if T0 = 100 (441Hz), check if there is a strong peak at 50 (882Hz) -> this would mean we detected the sub-harmonic
-    // Or if T0 = 50 (882Hz), check if there is a peak at 100 (441Hz) -> this would mean we detected the harmonic
-    
-    // Actually, for autocorrelation:
-    // T0 is the period in samples.
-    // Higher frequency = Smaller T0.
-    // Lower frequency = Larger T0.
-    
-    // If we detect E4 (329Hz, T0 ~= 134) instead of B5 (987Hz, T0 ~= 44),
-    // 134 is approx 3 * 44. This means we are detecting the 3rd sub-harmonic (period is 3x longer).
-    // This happens when the fundamental is weak or missing.
-    
-    // To fix this, we should look for the *first* strong peak, not just the *highest* peak.
-    // A "strong" peak is one that is close to the max value (e.g. > 0.8 * maxval).
-    
-    let T0 = maxpos;
-    
-    // Search for earlier strong peaks to avoid sub-harmonic errors (detecting a lower note than actual)
-    const threshold = 0.85 * maxval;
-    for (let i = d; i < maxpos; i++) {
-        if (correlations[i] > threshold) {
-            // Found an earlier strong peak!
-            // But wait, is it a local maximum?
-            if (correlations[i] > correlations[i-1] && correlations[i] > correlations[i+1]) {
-                 T0 = i;
-                 break;
-            }
-        }
+
+    // If the signal is too noisy, don't guess a pitch
+    // 0.5 allows high notes (which decay fast) but rejects pure noise
+    if (highestPeakVal < 0.5) {
+        return { frequency: -1, clarity: highestPeakVal };
+    }
+
+    // The core of MPM: the threshold avoids octave errors by selecting the first
+    // prominent peak rather than the absolute highest peak (which might be a sub-harmonic).
+    // A high k-value (0.95) ensures we don't accidentally pick a harmonic instead of the fundamental.
+    const threshold = 0.95 * highestPeakVal;
+
+    let bestTau = -1;
+    for (const p of maxPositions) {
+      if (nsdf[p] >= threshold) {
+        bestTau = p;
+        break;
+      }
+    }
+
+    if (bestTau === -1) {
+      return { frequency: -1, clarity: 0 };
     }
 
     // Parabolic interpolation for better precision
-    if (T0 > 0 && T0 < MAX_SAMPLES - 1) {
-        const x1 = correlations[T0 - 1];
-        const x2 = correlations[T0];
-        const x3 = correlations[T0 + 1];
-        const a = (x1 + x3 - 2 * x2) / 2;
-        const b = (x3 - x1) / 2;
-        if (a) T0 = T0 - b / (2 * a);
+    let tauEstimate = bestTau;
+    if (bestTau > 0 && bestTau < halfSize - 1) {
+      const s0 = nsdf[bestTau - 1];
+      const s1 = nsdf[bestTau];
+      const s2 = nsdf[bestTau + 1];
+      
+      const a = (s0 + s2 - 2 * s1) / 2;
+      const b = (s2 - s0) / 2;
+      if (a !== 0) {
+        tauEstimate = bestTau - b / (2 * a);
+      }
     }
 
-    return { frequency: sampleRate / T0, clarity: maxval };
+    const pitch = sampleRate / tauEstimate;
+    return { frequency: pitch, clarity: highestPeakVal };
   }
 }

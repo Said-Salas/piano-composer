@@ -50,7 +50,7 @@ export function useAudioRecorder() {
           C7: "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3", A7: "A7.mp3",
           C8: "C8.mp3"
         },
-        release: 1,
+        release: 4,
         baseUrl: "https://tonejs.github.io/audio/salamander/",
       }).toDestination();
 
@@ -81,9 +81,13 @@ export function useAudioRecorder() {
         }
 
         const { frequency, clarity } = analyzerRef.current.getPitch();
-        setVolume(clarity);
+        
+        // Boost clarity for testing and debugging, or use volume if it's very loud
+        const effectiveClarity = clarity;
 
-        const stableNote = detectorRef.current.process(frequency, clarity);
+        setVolume(effectiveClarity);
+
+        const stableNote = detectorRef.current.process(frequency, effectiveClarity);
         setDetectedNote(stableNote);
 
         if (recorderRef.current && isRecordingRef.current) {
@@ -100,20 +104,6 @@ export function useAudioRecorder() {
       localStorage.removeItem("mic_enabled");
     }
   }, []);
-
-  // Auto-start if previously enabled and user is logged in
-  useEffect(() => {
-    const checkAutoStart = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const micEnabled = localStorage.getItem("mic_enabled");
-      
-      if (session?.user && micEnabled === "true") {
-        initializeAudio();
-      }
-    };
-    
-    checkAutoStart();
-  }, [initializeAudio]);
 
   const startRecording = useCallback(() => {
     if (!recorderRef.current) return;
