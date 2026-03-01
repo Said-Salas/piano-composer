@@ -17,6 +17,7 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote }: Time
   
   // Calculate total width based on last note end time
   const lastNoteEnd = notes.reduce((max, note) => Math.max(max, note.startTime + note.duration), 0);
+  // Auto-extend width slightly beyond the last note
   const containerWidth = Math.max((lastNoteEnd / 1000) * PIXELS_PER_SECOND + 400, 1200);
 
   // Resize state
@@ -25,7 +26,25 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote }: Time
   const resizeStartDurationRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll logic
+  // Auto-scroll when new notes are added
+  useEffect(() => {
+    if (notes.length > 0 && containerRef.current && playbackTime === 0) {
+      const lastNote = notes[notes.length - 1];
+      const noteX = (lastNote.startTime / 1000) * PIXELS_PER_SECOND;
+      const containerWidth = containerRef.current.clientWidth;
+      const scrollLeft = containerRef.current.scrollLeft;
+
+      // If the new note is off-screen or near the right edge, scroll to it
+      if (noteX > scrollLeft + containerWidth * 0.8) {
+        containerRef.current.scrollTo({ 
+          left: noteX - containerWidth * 0.5, 
+          behavior: 'smooth' 
+        });
+      }
+    }
+  }, [notes.length, playbackTime]);
+
+  // Auto-scroll logic for playback
   useEffect(() => {
     if (playbackTime > 0 && containerRef.current) {
       const cursorX = playbackTime * PIXELS_PER_SECOND;

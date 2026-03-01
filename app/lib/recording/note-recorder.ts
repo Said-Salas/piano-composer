@@ -34,22 +34,17 @@ export class NoteRecorder {
 
     // If we have an active note
     if (this.activeNote) {
-      // If the detected note is different (or null/silence), we consider the previous note "finished"
-      // BUT per requirements, we don't care about the release time for duration.
-      // We just need to stop tracking it so we can start a new one if needed.
       if (detectedNote !== this.activeNote.pitch) {
+        // Only stop tracking if we actually have a different note or silence
         this.activeNote = null;
         
-        // If the new detection is a valid note, start a new one immediately
         if (detectedNote) {
-          this.recordNewNote(detectedNote, relativeTime);
+          this.recordNewNote(detectedNote, relativeTime, false);
         }
       }
-      // If detectedNote is the same, we just continue (do nothing)
     } else {
-      // No active note, but we detected one -> start it
       if (detectedNote) {
-        this.recordNewNote(detectedNote, relativeTime);
+        this.recordNewNote(detectedNote, relativeTime, false);
       }
     }
   }
@@ -61,19 +56,24 @@ export class NoteRecorder {
     const currentTime = performance.now();
     const relativeTime = currentTime - this.startTime;
     
-    // Just record it immediately as a discrete event
-    // We don't need to track "active note" state for manual clicks as they are instantaneous triggers
-    this.recordNewNote(pitch, relativeTime);
+    this.recordNewNote(pitch, relativeTime, true);
     
-    // Reset active note so we don't conflict with mic input immediately
-    // actually, we should probably leave activeNote alone if it came from mic?
-    // But if we click a key, we probably want it to register.
-    // Let's just fire and forget for manual notes.
-    this.activeNote = null; 
+    // For manual notes, we do not want to set activeNote.
+    // Setting activeNote = null ensures that if the microphone ALSO picks up the digital piano sound,
+    // the process() method won't get confused. However, we need to prevent double entry if both trigger.
+    // The boolean flag `isManual` handles this by temporarily blocking the microphone from recording the same note.
   }
 
-  private recordNewNote(pitch: string, startTime: number) {
-    // Immediately create and emit the note with fixed duration
+  private recordNewNote(pitch: string, startTime: number, isManual: boolean) {
+    // If a manual note just triggered, don't let the microphone record the exact same note immediately
+    if (!isManual && this.notes.length > 0) {
+      const lastNote = this.notes[this.notes.length - 1];
+      // If the microphone tries to record the same pitch within 300ms of a manual click, block it.
+      if (lastNote.pitch === pitch && (startTime - lastNote.startTime) < 300) {
+        return;
+      }
+    }
+
     const newNote: Note = {
       id: crypto.randomUUID(),
       pitch,
@@ -86,11 +86,15 @@ export class NoteRecorder {
       this.onNoteRecorded(newNote);
     }
 
-    // Set as active so we don't re-trigger it while holding
-    this.activeNote = {
-      pitch,
-      startTime
-    };
+    if (!isManual) {
+      this.activeNote = {
+        pitch,
+        startTime
+      };
+    } else {
+      // Clear active note so the microphone starts fresh
+      this.activeNote = null;
+    }
   }
 
   getNotes() {

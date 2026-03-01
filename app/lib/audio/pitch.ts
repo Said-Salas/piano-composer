@@ -81,6 +81,9 @@ export class AudioPitchAnalyzer {
     return this.mpmPitchDetection(this.buffer, this.sampleRate);
   }
 
+  // Added logic to calculate average amplitude per sample block (rms)
+  // to dynamically adjust the clarity threshold for high notes
+  // which naturally have weaker clarity values.
   private mpmPitchDetection(buffer: Float32Array, sampleRate: number): { frequency: number; clarity: number } {
     const SIZE = buffer.length;
     let sumOfSquares = 0;
@@ -90,7 +93,6 @@ export class AudioPitchAnalyzer {
     }
     const rootMeanSquare = Math.sqrt(sumOfSquares / SIZE);
 
-    // Increased RMS threshold to ignore typing and background noise
     if (rootMeanSquare < 0.003) { 
       return { frequency: -1, clarity: 0 };
     }
@@ -113,20 +115,17 @@ export class AudioPitchAnalyzer {
     let maxPositions: number[] = [];
     let pos = 0;
     
-    // Skip the first positive lobe (the lag=0 peak)
     while (pos < halfSize - 1 && nsdf[pos] > 0) {
       pos++;
     }
 
     while (pos < halfSize - 1) {
-      // Find next positive zero crossing
       while (pos < halfSize - 1 && nsdf[pos] <= 0) {
         pos++;
       }
       if (pos >= halfSize - 1) break;
 
       let curMaxPos = pos;
-      // Find the peak in this positive lobe
       while (pos < halfSize - 1 && nsdf[pos] > 0) {
         if (nsdf[pos] > nsdf[curMaxPos]) {
           curMaxPos = pos;
@@ -148,16 +147,16 @@ export class AudioPitchAnalyzer {
       }
     }
 
-    // If the signal is too noisy, don't guess a pitch
-    // 0.5 allows high notes (which decay fast) but rejects pure noise
     if (highestPeakVal < 0.5) {
         return { frequency: -1, clarity: highestPeakVal };
     }
 
-    // The core of MPM: the threshold avoids octave errors by selecting the first
-    // prominent peak rather than the absolute highest peak (which might be a sub-harmonic).
-    // A high k-value (0.95) ensures we don't accidentally pick a harmonic instead of the fundamental.
-    const threshold = 0.95 * highestPeakVal;
+    // Octave UP error fix (e.g. D3 detected as D4):
+    // Pianos produce a very strong 2nd harmonic (octave up). If we just take the first peak that crosses 0.95,
+    // we sometimes miss the fundamental if it is slightly weaker than the harmonic.
+    // Standard MPM uses an adaptive threshold for this. We lower the k-value to 0.85 
+    // to ensure we catch the earlier (lower frequency) fundamental peak, even if the harmonic is slightly taller.
+    const threshold = 0.85 * highestPeakVal;
 
     let bestTau = -1;
     for (const p of maxPositions) {

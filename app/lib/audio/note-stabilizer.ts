@@ -12,15 +12,21 @@ export class MonophonicNoteDetector {
   private minClarity: number = 0.5; 
   
   // Consistency threshold prevents transient noises/typing from triggering fake notes
-  private consistencyThreshold: number = 4; // 4 frames (~66ms) of EXACT same note required
+  private consistencyThreshold: number = 2; // Reduced back to 2 to catch fast high notes like A6 and C7
   
   // Debounce logic for note release
   private releaseCounter: number = 0;
-  private releaseThreshold: number = 10; // 10 frames (~166ms) before a note is considered released, prevents splitting single notes
+  private releaseThreshold: number = 15; // Increased to 15 frames (~250ms) to aggressively prevent single notes splitting into multiple
 
   process(frequency: number, clarity: number): string | null {
+    // Dynamic minimum clarity: lower threshold for higher frequencies
+    // since high piano strings decay extremely fast into noise
+    let dynamicMinClarity = this.minClarity;
+    if (frequency > 1000) dynamicMinClarity = 0.4;
+    if (frequency > 2000) dynamicMinClarity = 0.3;
+
     // We filter out low clarity signals (background noise/transients) and out of bounds frequencies
-    if (clarity < this.minClarity || frequency < this.minFrequency || frequency > this.maxFrequency) {
+    if (clarity < dynamicMinClarity || frequency < this.minFrequency || frequency > this.maxFrequency) {
       // Signal lost
       if (this.stableNote) {
         this.releaseCounter++;
