@@ -147,6 +147,10 @@ export function useAudioRecorder() {
     );
   }, []);
 
+  const deleteNote = useCallback((id: string) => {
+    setNotes(prevNotes => prevNotes.filter(note => note.id !== id));
+  }, []);
+
   const addManualNote = useCallback((pitch: string) => {
     if (!isRecordingRef.current || !recorderRef.current) return;
     recorderRef.current.recordManualNote(pitch);
@@ -185,6 +189,7 @@ export function useAudioRecorder() {
     playSong,
     stopSong,
     updateNote,
+    deleteNote,
     addManualNote
   };
 }

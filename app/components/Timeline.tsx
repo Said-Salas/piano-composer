@@ -6,9 +6,10 @@ interface TimelineProps {
   notes: Note[];
   playbackTime?: number;
   onUpdateNote?: (id: string, updates: Partial<Note>) => void;
+  onDeleteNote?: (id: string) => void;
 }
 
-export default function Timeline({ notes, playbackTime = 0, onUpdateNote }: TimelineProps) {
+export default function Timeline({ notes, playbackTime = 0, onUpdateNote, onDeleteNote }: TimelineProps) {
   // Constants
   const PIXELS_PER_SECOND = 100;
   const ROW_HEIGHT = 40; // Taller rows for better visibility
@@ -24,6 +25,12 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote }: Time
   const [resizingNoteId, setResizingNoteId] = useState<string | null>(null);
   const resizeStartXRef = useRef<number>(0);
   const resizeStartDurationRef = useRef<number>(0);
+  
+  // Drag state
+  const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
+  const dragStartXRef = useRef<number>(0);
+  const dragStartTimeRef = useRef<number>(0);
+  
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll when new notes are added
@@ -67,22 +74,41 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote }: Time
     resizeStartDurationRef.current = note.duration;
   };
 
+  // Handle drag
+  const handleDragStart = (e: React.MouseEvent, note: Note) => {
+    // Prevent drag if clicking resize handle or delete button
+    if ((e.target as HTMLElement).closest('.resize-handle') || (e.target as HTMLElement).closest('.delete-btn')) return;
+    
+    e.stopPropagation();
+    e.preventDefault();
+    setDraggingNoteId(note.id);
+    dragStartXRef.current = e.clientX;
+    dragStartTimeRef.current = note.startTime;
+  };
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!resizingNoteId || !onUpdateNote) return;
-      
-      const deltaX = e.clientX - resizeStartXRef.current;
-      const deltaDuration = (deltaX / PIXELS_PER_SECOND) * 1000;
-      const newDuration = Math.max(100, resizeStartDurationRef.current + deltaDuration); // Min 100ms
-      
-      onUpdateNote(resizingNoteId, { duration: newDuration });
+      if (resizingNoteId && onUpdateNote) {
+        const deltaX = e.clientX - resizeStartXRef.current;
+        const deltaDuration = (deltaX / PIXELS_PER_SECOND) * 1000;
+        const newDuration = Math.max(100, resizeStartDurationRef.current + deltaDuration); // Min 100ms
+        
+        onUpdateNote(resizingNoteId, { duration: newDuration });
+      } else if (draggingNoteId && onUpdateNote) {
+        const deltaX = e.clientX - dragStartXRef.current;
+        const deltaTime = (deltaX / PIXELS_PER_SECOND) * 1000;
+        const newStartTime = Math.max(0, dragStartTimeRef.current + deltaTime); // Can't go before 0
+        
+        onUpdateNote(draggingNoteId, { startTime: newStartTime });
+      }
     };
 
     const handleMouseUp = () => {
       setResizingNoteId(null);
+      setDraggingNoteId(null);
     };
 
-    if (resizingNoteId) {
+    if (resizingNoteId || draggingNoteId) {
       window.addEventListener("mousemove", handleMouseMove);
       window.addEventListener("mouseup", handleMouseUp);
     }
@@ -91,7 +117,7 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote }: Time
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [resizingNoteId, onUpdateNote]);
+  }, [resizingNoteId, draggingNoteId, onUpdateNote]);
 
   return (
     <div 
@@ -175,15 +201,32 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote }: Time
                 height: `${ROW_HEIGHT - 8}px`, // -8 for spacing
                 zIndex: 20
               }}
+              onMouseDown={(e) => handleDragStart(e, note)}
             >
               <span className="text-xs font-bold text-white/90 drop-shadow-md px-1 truncate pointer-events-none">
                 {note.pitch}
               </span>
               
+              {/* Delete Button */}
+              {onDeleteNote && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteNote(note.id);
+                  }}
+                  className="delete-btn absolute left-0 top-0 bottom-0 px-1 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500/80 transition-all z-40 flex items-center justify-center"
+                  title="Delete note"
+                >
+                  <svg className="w-3 h-3 drop-shadow-md pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+              
               {/* Resize Handle */}
               {onUpdateNote && (
                 <div 
-                  className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize hover:bg-white/30 active:bg-white/50 transition-colors z-30"
+                  className="resize-handle absolute right-0 top-0 bottom-0 w-3 cursor-col-resize hover:bg-white/30 active:bg-white/50 transition-colors z-30"
                   onMouseDown={(e) => handleResizeStart(e, note)}
                 />
               )}

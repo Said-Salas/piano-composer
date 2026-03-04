@@ -22,6 +22,7 @@ export default function Home() {
     playSong,
     stopSong,
     updateNote,
+    deleteNote,
     addManualNote
   } = useAudioRecorder();
 
@@ -116,7 +117,7 @@ export default function Home() {
               Drag right edge of notes to resize
             </p>
           </div>
-          <Timeline notes={notes} playbackTime={playbackTime} onUpdateNote={updateNote} />
+          <Timeline notes={notes} playbackTime={playbackTime} onUpdateNote={updateNote} onDeleteNote={deleteNote} />
         </section>
 
         {/* Piano Section */}
