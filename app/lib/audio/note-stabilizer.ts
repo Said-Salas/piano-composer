@@ -11,8 +11,8 @@ export class MonophonicNoteDetector {
   private maxFrequency: number = 4200;
   private minClarity: number = 0.5; 
   
-  // Consistency threshold prevents transient noises/typing from triggering fake notes
-  private consistencyThreshold: number = 2; // Reduced back to 2 to catch fast high notes like A6 and C7
+    // Consistency threshold prevents transient noises/typing from triggering fake notes
+    private consistencyThreshold: number = 4; // Increased to 4 to prevent harmonic flickering
   
   // Debounce logic for note release
   private releaseCounter: number = 0;

@@ -81,8 +81,8 @@ export class AudioPitchAnalyzer {
 
     // 1. Try a short window first (512 samples ~11ms) to catch fast-decaying high notes (C6, A6, etc)
     const shortBuffer = this.buffer.subarray(0, 512);
-    // Low RMS threshold to pick up quiet high notes
-    const shortResult = this.yinPitchDetection(shortBuffer, this.sampleRate, 0.0005, true);
+    // Extra low RMS threshold to pick up quiet high notes
+    const shortResult = this.yinPitchDetection(shortBuffer, this.sampleRate, 0.0001, true);
     
     // If the short window detects a clear, high pitch (> 800 Hz ~ G5), trust it.
     if (shortResult.clarity > 0.6 && shortResult.frequency > 800) {
@@ -90,8 +90,8 @@ export class AudioPitchAnalyzer {
     }
 
     // 2. Fallback to full window (2048 samples) for mid and low notes
-    // Higher RMS threshold (0.0015) to ignore typing noise
-    return this.yinPitchDetection(this.buffer, this.sampleRate, 0.0015, false);
+    // Higher RMS threshold (0.0010) to ignore typing noise, but still catch quiet piano notes
+    return this.yinPitchDetection(this.buffer, this.sampleRate, 0.0010, false);
   }
 
   private yinPitchDetection(buffer: Float32Array, sampleRate: number, rmsThreshold: number, isShortBuffer: boolean): { frequency: number; clarity: number } {
@@ -129,50 +129,53 @@ export class AudioPitchAnalyzer {
       cmndf[tau] = diff[tau] * tau / runningSum;
     }
 
-    // 3. Find all local minima
-    let minima: {tau: number, val: number}[] = [];
+    // 3. Find the first local minimum below the absolute threshold
+    let tauEstimate = -1;
+    let minTau = -1;
+    let minCmndf = Infinity;
+    
+    // High notes (short buffer) have more noise/windowing artifacts, so we allow a higher CMNDF threshold (0.25).
+    // Mid/low notes must be very clear to prevent harmonics (0.10).
+    let absoluteThreshold = isShortBuffer ? 0.25 : 0.10; 
+
     for (let tau = 1; tau < halfSize - 1; tau++) {
+       // Is it a local minimum?
        if (cmndf[tau] < cmndf[tau-1] && cmndf[tau] < cmndf[tau+1]) {
-           minima.push({tau, val: cmndf[tau]});
+           if (cmndf[tau] < minCmndf) {
+               minCmndf = cmndf[tau];
+               minTau = tau;
+           }
        }
     }
 
-    if (minima.length === 0) {
+    if (minTau === -1) {
         return { frequency: -1, clarity: 0 };
     }
 
-    // 4. Select the best minimum
-    let tauEstimate = -1;
-    let absoluteThreshold = isShortBuffer ? 0.35 : 0.20; // High notes have worse correlation, allow higher threshold
+    // To avoid octave errors (picking a harmonic instead of fundamental),
+    // we look for the first local minimum that is below the absolute threshold.
+    // BUT, to avoid picking a weak harmonic, we also require it to be not much worse than the global minimum.
+    let dynamicThreshold = Math.min(absoluteThreshold, minCmndf + 0.05);
 
-    for (let i = 0; i < minima.length; i++) {
-        let m = minima[i];
-        if (m.val < absoluteThreshold) {
-            // Found a candidate.
-            // Pianos have strong 2nd harmonics, causing an early dip (e.g., A3 when A2 is played).
-            // To prevent Octave UP errors, we look ahead to see if there is a deeper dip (the true fundamental).
-            let foundDeeper = false;
-            for (let j = i + 1; j < minima.length; j++) {
-                // If a later dip is significantly deeper, the current one is just a harmonic.
-                // We require the later dip to be at least 20% deeper to justify skipping the current one.
-                if (minima[j].val < m.val * 0.8) {
-                    foundDeeper = true;
-                    break;
-                }
-            }
-            
-            if (!foundDeeper) {
-                tauEstimate = m.tau;
-                break;
-            }
-        }
+    for (let tau = 1; tau < halfSize - 1; tau++) {
+       if (cmndf[tau] < cmndf[tau-1] && cmndf[tau] < cmndf[tau+1]) {
+           if (cmndf[tau] <= dynamicThreshold) {
+               tauEstimate = tau;
+               break;
+           }
+       }
     }
 
     if (tauEstimate === -1) {
-      return { frequency: -1, clarity: 0 };
+      // Fallback to global minimum if it's reasonable
+      if (minCmndf < 0.2) {
+        tauEstimate = minTau;
+      } else {
+        return { frequency: -1, clarity: 0 };
+      }
     }
 
-    // 5. Parabolic interpolation for better precision
+    // 4. Parabolic interpolation for better precision
     if (tauEstimate > 0 && tauEstimate < halfSize - 1) {
       const s0 = cmndf[tauEstimate - 1];
       const s1 = cmndf[tauEstimate];

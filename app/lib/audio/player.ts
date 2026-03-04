@@ -31,11 +31,17 @@ export class SongPlayer {
     // Schedule notes
     // Tone.Part expects events in format: [time, value]
     // We'll use seconds for time
-    const events = sortedNotes.map(note => ({
-      time: note.startTime / 1000,
-      note: note.pitch,
-      duration: note.duration / 1000
-    }));
+    const events = sortedNotes.map(note => {
+      // Shift octave up by 1 for Tone.js playback to match standard scientific pitch
+      // since our app is shifted down by 1 octave for display
+      const toneNote = note.pitch.replace(/(\d+)/, (match) => (parseInt(match) + 1).toString());
+      
+      return {
+        time: note.startTime / 1000,
+        note: toneNote,
+        duration: note.duration / 1000
+      };
+    });
 
     this.currentPart = new Tone.Part((time, event) => {
       this.sampler?.triggerAttackRelease(event.note, event.duration, time);

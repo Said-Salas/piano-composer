@@ -69,9 +69,9 @@ export class NoteRecorder {
     
     this.recordNewNote(pitch, relativeTime, true);
     
-    // Block microphone from recording this same pitch for 1.5 seconds
-    // because the digital piano sound will ring out and be picked up by the mic.
-    this.manualNoteBlocks.set(pitch, currentTime + 1500);
+    // Block microphone from recording this same pitch for 4.5 seconds
+    // because the digital piano sound has a 4-second release tail and will ring out.
+    this.manualNoteBlocks.set(pitch, currentTime + 4500);
   }
 
   private recordNewNote(pitch: string, startTime: number, isManual: boolean) {

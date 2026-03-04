@@ -68,7 +68,11 @@ export default function Piano({ highlightedNote, onNotePlay }: PianoProps) {
     if (!sampler || !isLoaded) return;
     // Tone.start() is required by browsers on first interaction
     Tone.start(); 
-    sampler.triggerAttack(note);
+    
+    // Shift octave up by 1 for Tone.js to match standard scientific pitch
+    // since our app is now shifted down by 1 octave to match Yamaha numbering
+    const toneNote = note.replace(/(\d+)/, (match) => (parseInt(match) + 1).toString());
+    sampler.triggerAttack(toneNote);
     
     if (onNotePlay) {
       onNotePlay(note);
@@ -77,11 +81,12 @@ export default function Piano({ highlightedNote, onNotePlay }: PianoProps) {
 
   const stopNote = (note: string) => {
     if (!sampler || !isLoaded) return;
-    sampler.triggerRelease(note);
+    const toneNote = note.replace(/(\d+)/, (match) => (parseInt(match) + 1).toString());
+    sampler.triggerRelease(toneNote);
   };
 
-  // Generate 4 octaves for the demo (C3 to B6)
-  const octaves = [2, 3, 4, 5, 6];
+  // Generate 5 octaves for the demo (C1 to B5)
+  const octaves = [1, 2, 3, 4, 5];
 
   return (
     <div className="w-full max-w-full relative">
@@ -149,7 +154,7 @@ export default function Piano({ highlightedNote, onNotePlay }: PianoProps) {
 
         <div className="flex shrink-0 relative">
            <Key 
-             note="C7" 
+             note="C6" 
              onPlay={playNote} 
              onStop={stopNote} 
              highlightedNote={highlightedNote}

@@ -30,7 +30,8 @@ export function frequencyToMidi(frequency: number): number {
 export function midiToNoteName(midi: number): string {
   if (midi < 0) return "";
   const noteIndex = midi % 12;
-  const octave = Math.floor(midi / 12) - 1;
+  // Shifted by 1 octave so that MIDI 36 (65.4 Hz) displays as C1 instead of C2
+  const octave = Math.floor(midi / 12) - 2;
   return `${NOTE_NAMES[noteIndex]}${octave}`;
 }
 
@@ -41,7 +42,8 @@ export function noteNameToMidi(noteName: string): number {
     const octave = parseInt(match[2]);
     const noteIndex = NOTE_NAMES.indexOf(note);
     if (noteIndex === -1) return -1;
-    return (octave + 1) * 12 + noteIndex;
+    // Shifted by 1 octave to match midiToNoteName
+    return (octave + 2) * 12 + noteIndex;
 }
 
 export function frequencyToNote(frequency: number): string {
