@@ -49,28 +49,37 @@ export class NoteRecorder {
     }
   }
 
+  private manualNoteBlocks: Map<string, number> = new Map();
+  private lastManualNoteTime: Map<string, number> = new Map();
+
   // Manually record a note (e.g. from digital piano click)
   recordManualNote(pitch: string) {
     if (!this.isRecording) return;
     
     const currentTime = performance.now();
+
+    // Debounce manual clicks (prevent double-firing from UI bugs or touch screens)
+    const lastTime = this.lastManualNoteTime.get(pitch) || 0;
+    if (currentTime - lastTime < 150) {
+      return; 
+    }
+    this.lastManualNoteTime.set(pitch, currentTime);
+
     const relativeTime = currentTime - this.startTime;
     
     this.recordNewNote(pitch, relativeTime, true);
     
-    // For manual notes, we do not want to set activeNote.
-    // Setting activeNote = null ensures that if the microphone ALSO picks up the digital piano sound,
-    // the process() method won't get confused. However, we need to prevent double entry if both trigger.
-    // The boolean flag `isManual` handles this by temporarily blocking the microphone from recording the same note.
+    // Block microphone from recording this same pitch for 1.5 seconds
+    // because the digital piano sound will ring out and be picked up by the mic.
+    this.manualNoteBlocks.set(pitch, currentTime + 1500);
   }
 
   private recordNewNote(pitch: string, startTime: number, isManual: boolean) {
-    // If a manual note just triggered, don't let the microphone record the exact same note immediately
-    if (!isManual && this.notes.length > 0) {
-      const lastNote = this.notes[this.notes.length - 1];
-      // If the microphone tries to record the same pitch within 300ms of a manual click, block it.
-      if (lastNote.pitch === pitch && (startTime - lastNote.startTime) < 300) {
-        return;
+    if (!isManual) {
+      // Check if this pitch is blocked because it was just played on the digital piano
+      const blockUntil = this.manualNoteBlocks.get(pitch);
+      if (blockUntil && performance.now() < blockUntil) {
+        return; // Ignore this mic input
       }
     }
 

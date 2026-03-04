@@ -78,13 +78,23 @@ export class AudioPitchAnalyzer {
     if (!this.analyser) return { frequency: 0, clarity: 0 };
 
     this.analyser.getFloatTimeDomainData(this.buffer as any);
-    return this.mpmPitchDetection(this.buffer, this.sampleRate);
+
+    // 1. Try a short window first (512 samples ~11ms) to catch fast-decaying high notes (C6, A6, etc)
+    const shortBuffer = this.buffer.subarray(0, 512);
+    // Low RMS threshold to pick up quiet high notes
+    const shortResult = this.yinPitchDetection(shortBuffer, this.sampleRate, 0.0005, true);
+    
+    // If the short window detects a clear, high pitch (> 800 Hz ~ G5), trust it.
+    if (shortResult.clarity > 0.6 && shortResult.frequency > 800) {
+      return shortResult;
+    }
+
+    // 2. Fallback to full window (2048 samples) for mid and low notes
+    // Higher RMS threshold (0.0015) to ignore typing noise
+    return this.yinPitchDetection(this.buffer, this.sampleRate, 0.0015, false);
   }
 
-  // Added logic to calculate average amplitude per sample block (rms)
-  // to dynamically adjust the clarity threshold for high notes
-  // which naturally have weaker clarity values.
-  private mpmPitchDetection(buffer: Float32Array, sampleRate: number): { frequency: number; clarity: number } {
+  private yinPitchDetection(buffer: Float32Array, sampleRate: number, rmsThreshold: number, isShortBuffer: boolean): { frequency: number; clarity: number } {
     const SIZE = buffer.length;
     let sumOfSquares = 0;
     for (let i = 0; i < SIZE; i++) {
@@ -93,98 +103,92 @@ export class AudioPitchAnalyzer {
     }
     const rootMeanSquare = Math.sqrt(sumOfSquares / SIZE);
 
-    if (rootMeanSquare < 0.003) { 
+    if (rootMeanSquare < rmsThreshold) { 
       return { frequency: -1, clarity: 0 };
     }
 
     const halfSize = Math.floor(SIZE / 2);
-    const nsdf = new Float32Array(halfSize);
-
-    for (let tau = 0; tau < halfSize; tau++) {
-      let acf = 0;
-      let m = 0;
-      for (let i = 0; i < halfSize; i++) {
-        const val1 = buffer[i];
-        const val2 = buffer[i + tau];
-        acf += val1 * val2;
-        m += val1 * val1 + val2 * val2;
-      }
-      nsdf[tau] = m === 0 ? 0 : (2 * acf) / m;
-    }
-
-    let maxPositions: number[] = [];
-    let pos = 0;
+    const diff = new Float32Array(halfSize);
     
-    while (pos < halfSize - 1 && nsdf[pos] > 0) {
-      pos++;
+    // 1. Difference function
+    for (let tau = 0; tau < halfSize; tau++) {
+      let deltaSum = 0;
+      for (let i = 0; i < halfSize; i++) {
+        const delta = buffer[i] - buffer[i + tau];
+        deltaSum += delta * delta;
+      }
+      diff[tau] = deltaSum;
     }
 
-    while (pos < halfSize - 1) {
-      while (pos < halfSize - 1 && nsdf[pos] <= 0) {
-        pos++;
-      }
-      if (pos >= halfSize - 1) break;
+    // 2. Cumulative mean normalized difference function
+    const cmndf = new Float32Array(halfSize);
+    cmndf[0] = 1;
+    let runningSum = 0;
+    for (let tau = 1; tau < halfSize; tau++) {
+      runningSum += diff[tau];
+      cmndf[tau] = diff[tau] * tau / runningSum;
+    }
 
-      let curMaxPos = pos;
-      while (pos < halfSize - 1 && nsdf[pos] > 0) {
-        if (nsdf[pos] > nsdf[curMaxPos]) {
-          curMaxPos = pos;
+    // 3. Find all local minima
+    let minima: {tau: number, val: number}[] = [];
+    for (let tau = 1; tau < halfSize - 1; tau++) {
+       if (cmndf[tau] < cmndf[tau-1] && cmndf[tau] < cmndf[tau+1]) {
+           minima.push({tau, val: cmndf[tau]});
+       }
+    }
+
+    if (minima.length === 0) {
+        return { frequency: -1, clarity: 0 };
+    }
+
+    // 4. Select the best minimum
+    let tauEstimate = -1;
+    let absoluteThreshold = isShortBuffer ? 0.35 : 0.20; // High notes have worse correlation, allow higher threshold
+
+    for (let i = 0; i < minima.length; i++) {
+        let m = minima[i];
+        if (m.val < absoluteThreshold) {
+            // Found a candidate.
+            // Pianos have strong 2nd harmonics, causing an early dip (e.g., A3 when A2 is played).
+            // To prevent Octave UP errors, we look ahead to see if there is a deeper dip (the true fundamental).
+            let foundDeeper = false;
+            for (let j = i + 1; j < minima.length; j++) {
+                // If a later dip is significantly deeper, the current one is just a harmonic.
+                // We require the later dip to be at least 20% deeper to justify skipping the current one.
+                if (minima[j].val < m.val * 0.8) {
+                    foundDeeper = true;
+                    break;
+                }
+            }
+            
+            if (!foundDeeper) {
+                tauEstimate = m.tau;
+                break;
+            }
         }
-        pos++;
-      }
-      
-      maxPositions.push(curMaxPos);
     }
 
-    if (maxPositions.length === 0) {
+    if (tauEstimate === -1) {
       return { frequency: -1, clarity: 0 };
     }
 
-    let highestPeakVal = -1;
-    for (const p of maxPositions) {
-      if (nsdf[p] > highestPeakVal) {
-        highestPeakVal = nsdf[p];
-      }
-    }
-
-    if (highestPeakVal < 0.5) {
-        return { frequency: -1, clarity: highestPeakVal };
-    }
-
-    // Octave UP error fix (e.g. D3 detected as D4):
-    // Pianos produce a very strong 2nd harmonic (octave up). If we just take the first peak that crosses 0.95,
-    // we sometimes miss the fundamental if it is slightly weaker than the harmonic.
-    // Standard MPM uses an adaptive threshold for this. We lower the k-value to 0.85 
-    // to ensure we catch the earlier (lower frequency) fundamental peak, even if the harmonic is slightly taller.
-    const threshold = 0.85 * highestPeakVal;
-
-    let bestTau = -1;
-    for (const p of maxPositions) {
-      if (nsdf[p] >= threshold) {
-        bestTau = p;
-        break;
-      }
-    }
-
-    if (bestTau === -1) {
-      return { frequency: -1, clarity: 0 };
-    }
-
-    // Parabolic interpolation for better precision
-    let tauEstimate = bestTau;
-    if (bestTau > 0 && bestTau < halfSize - 1) {
-      const s0 = nsdf[bestTau - 1];
-      const s1 = nsdf[bestTau];
-      const s2 = nsdf[bestTau + 1];
+    // 5. Parabolic interpolation for better precision
+    if (tauEstimate > 0 && tauEstimate < halfSize - 1) {
+      const s0 = cmndf[tauEstimate - 1];
+      const s1 = cmndf[tauEstimate];
+      const s2 = cmndf[tauEstimate + 1];
       
       const a = (s0 + s2 - 2 * s1) / 2;
       const b = (s2 - s0) / 2;
       if (a !== 0) {
-        tauEstimate = bestTau - b / (2 * a);
+        tauEstimate = tauEstimate - b / (2 * a);
       }
     }
 
     const pitch = sampleRate / tauEstimate;
-    return { frequency: pitch, clarity: highestPeakVal };
+    // Clarity is inversly proportional to the CMNDF dip value
+    const clarity = Math.max(0, 1 - cmndf[Math.round(tauEstimate)]);
+
+    return { frequency: pitch, clarity };
   }
 }
