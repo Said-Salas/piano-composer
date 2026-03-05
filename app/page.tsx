@@ -182,7 +182,14 @@ export default function Home() {
               Drag notes to move or resize
             </p>
           </div>
-          <Timeline notes={notes} playbackTime={playbackTime} onUpdateNote={updateNote} onDeleteNote={deleteNote} onUpdateNoteEnd={commitCurrentNotesToHistory} />
+          <Timeline 
+            notes={notes} 
+            playbackTime={playbackTime} 
+            isRecording={isRecording}
+            onUpdateNote={updateNote} 
+            onDeleteNote={deleteNote} 
+            onUpdateNoteEnd={commitCurrentNotesToHistory} 
+          />
         </section>
 
         {/* Piano Section */}
