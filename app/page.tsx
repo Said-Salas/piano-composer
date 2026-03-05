@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useAudioRecorder } from "./hooks/useAudioRecorder";
 import Piano from "./components/Piano";
 import Timeline from "./components/Timeline";
 import { AuthButton } from "./components/AuthButton";
 import { SongManager } from "./components/SongManager";
+import { supabase } from "./lib/supabase";
 
 export default function Home() {
   const {
@@ -15,6 +17,9 @@ export default function Home() {
     detectedNote,
     notes,
     volume,
+    currentSong,
+    canUndo,
+    canRedo,
     setNotes,
     initializeAudio,
     startRecording,
@@ -23,8 +28,31 @@ export default function Home() {
     stopSong,
     updateNote,
     deleteNote,
-    addManualNote
+    addManualNote,
+    undo,
+    redo,
+    commitCurrentNotesToHistory,
+    handleLoadSong,
+    setCurrentSong
   } = useAudioRecorder();
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  const saveChanges = async () => {
+    if (!currentSong) return;
+    setIsSaving(true);
+    const { error } = await supabase.from('songs').update({
+      notes: notes
+    }).eq('id', currentSong.id);
+    
+    setIsSaving(false);
+    if (!error) {
+       alert("Changes saved successfully!");
+       setCurrentSong({ ...currentSong, notes });
+    } else {
+       alert("Error saving: " + error.message);
+    }
+  };
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-black text-white gap-8 font-sans">
@@ -33,7 +61,7 @@ export default function Home() {
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
             Piano Composer
           </h1>
-          <SongManager currentNotes={notes} onLoadSong={setNotes} />
+          <SongManager currentNotes={notes} onLoadSong={handleLoadSong} />
         </div>
         
         <div className="flex gap-4 items-center">
@@ -110,14 +138,51 @@ export default function Home() {
         {/* Timeline Section */}
         <section className="flex flex-col gap-2">
           <div className="flex justify-between items-end">
-            <h2 className="text-gray-400 text-sm uppercase tracking-wider font-semibold ml-1">
-              Timeline
-            </h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-gray-400 text-sm uppercase tracking-wider font-semibold ml-1">
+                Timeline
+              </h2>
+              {/* Edit Controls: Undo, Redo, Save Changes */}
+              {(!isRecording && notes.length > 0) && (
+                <div className="flex items-center gap-1 border-l border-gray-800 pl-4">
+                  <button 
+                    onClick={undo}
+                    disabled={!canUndo}
+                    className={`p-1.5 rounded-md flex items-center justify-center transition-colors ${canUndo ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 cursor-not-allowed"}`}
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                  </button>
+                  <button 
+                    onClick={redo}
+                    disabled={!canRedo}
+                    className={`p-1.5 rounded-md flex items-center justify-center transition-colors ${canRedo ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 cursor-not-allowed"}`}
+                    title="Redo (Ctrl+Shift+Z)"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" transform="scale(-1, 1)">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                  </button>
+                  
+                  {currentSong && (
+                    <button
+                      onClick={saveChanges}
+                      disabled={isSaving}
+                      className="ml-2 px-3 py-1 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 rounded-md font-medium transition-colors disabled:opacity-50"
+                    >
+                      {isSaving ? "Saving..." : "Save Changes"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             <p className="text-xs text-gray-600">
-              Drag right edge of notes to resize
+              Drag notes to move or resize
             </p>
           </div>
-          <Timeline notes={notes} playbackTime={playbackTime} onUpdateNote={updateNote} onDeleteNote={deleteNote} />
+          <Timeline notes={notes} playbackTime={playbackTime} onUpdateNote={updateNote} onDeleteNote={deleteNote} onUpdateNoteEnd={commitCurrentNotesToHistory} />
         </section>
 
         {/* Piano Section */}

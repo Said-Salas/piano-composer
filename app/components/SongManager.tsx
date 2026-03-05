@@ -14,7 +14,7 @@ export function SongManager({
   onLoadSong 
 }: { 
   currentNotes: Note[], 
-  onLoadSong: (notes: Note[]) => void 
+  onLoadSong: (song: SavedSong) => void 
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [songs, setSongs] = useState<SavedSong[]>([]);
@@ -72,7 +72,7 @@ export function SongManager({
   };
 
   const loadSong = (song: SavedSong) => {
-    onLoadSong(song.notes);
+    onLoadSong(song);
     setIsOpen(false);
   };
 

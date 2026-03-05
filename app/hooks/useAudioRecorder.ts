@@ -15,6 +15,66 @@ export function useAudioRecorder() {
   const [detectedNote, setDetectedNote] = useState<string | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [volume, setVolume] = useState(0);
+  
+  // History state
+  const [currentSong, setCurrentSong] = useState<any>(null);
+  const historyRef = useRef<Note[][]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const updateHistoryState = useCallback(() => {
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+  }, []);
+
+  const commitToHistory = useCallback((newNotes: Note[]) => {
+    const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+    // Only push if different from last state
+    if (newHistory.length > 0) {
+      const lastState = newHistory[newHistory.length - 1];
+      if (JSON.stringify(lastState) === JSON.stringify(newNotes)) return;
+    }
+    newHistory.push(JSON.parse(JSON.stringify(newNotes)));
+    historyRef.current = newHistory;
+    historyIndexRef.current = newHistory.length - 1;
+    updateHistoryState();
+  }, [updateHistoryState]);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      historyIndexRef.current -= 1;
+      setNotes(historyRef.current[historyIndexRef.current]);
+      updateHistoryState();
+    }
+  }, [updateHistoryState]);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyIndexRef.current += 1;
+      setNotes(historyRef.current[historyIndexRef.current]);
+      updateHistoryState();
+    }
+  }, [updateHistoryState]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   const analyzerRef = useRef<AudioPitchAnalyzer | null>(null);
   const detectorRef = useRef<MonophonicNoteDetector | null>(null);
@@ -108,17 +168,22 @@ export function useAudioRecorder() {
   const startRecording = useCallback(() => {
     if (!recorderRef.current) return;
     setNotes([]); // Clear previous notes
+    historyRef.current = [];
+    historyIndexRef.current = -1;
+    setCurrentSong(null);
+    updateHistoryState();
     recorderRef.current.start();
     setIsRecording(true);
     isRecordingRef.current = true;
-  }, []);
+  }, [updateHistoryState]);
 
   const stopRecording = useCallback(() => {
     if (!recorderRef.current) return;
-    recorderRef.current.stop();
+    const recordedNotes = recorderRef.current.stop();
     setIsRecording(false);
     isRecordingRef.current = false;
-  }, []);
+    commitToHistory(recordedNotes);
+  }, [commitToHistory]);
 
   const playSong = useCallback(async () => {
     if (!playerRef.current || notes.length === 0) return;
@@ -148,8 +213,27 @@ export function useAudioRecorder() {
   }, []);
 
   const deleteNote = useCallback((id: string) => {
-    setNotes(prevNotes => prevNotes.filter(note => note.id !== id));
-  }, []);
+    setNotes(prevNotes => {
+      const newNotes = prevNotes.filter(note => note.id !== id);
+      commitToHistory(newNotes);
+      return newNotes;
+    });
+  }, [commitToHistory]);
+
+  const commitCurrentNotesToHistory = useCallback(() => {
+    setNotes(prevNotes => {
+      commitToHistory(prevNotes);
+      return prevNotes;
+    });
+  }, [commitToHistory]);
+
+  const handleLoadSong = useCallback((song: any) => {
+    setNotes(song.notes);
+    setCurrentSong(song);
+    historyRef.current = [JSON.parse(JSON.stringify(song.notes))];
+    historyIndexRef.current = 0;
+    updateHistoryState();
+  }, [updateHistoryState]);
 
   const addManualNote = useCallback((pitch: string) => {
     if (!isRecordingRef.current || !recorderRef.current) return;
@@ -182,6 +266,9 @@ export function useAudioRecorder() {
     detectedNote,
     notes,
     volume,
+    currentSong,
+    canUndo,
+    canRedo,
     setNotes,
     initializeAudio,
     startRecording,
@@ -190,6 +277,11 @@ export function useAudioRecorder() {
     stopSong,
     updateNote,
     deleteNote,
-    addManualNote
+    addManualNote,
+    undo,
+    redo,
+    commitCurrentNotesToHistory,
+    handleLoadSong,
+    setCurrentSong
   };
 }

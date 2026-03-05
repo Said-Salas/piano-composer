@@ -7,9 +7,10 @@ interface TimelineProps {
   playbackTime?: number;
   onUpdateNote?: (id: string, updates: Partial<Note>) => void;
   onDeleteNote?: (id: string) => void;
+  onUpdateNoteEnd?: () => void;
 }
 
-export default function Timeline({ notes, playbackTime = 0, onUpdateNote, onDeleteNote }: TimelineProps) {
+export default function Timeline({ notes, playbackTime = 0, onUpdateNote, onDeleteNote, onUpdateNoteEnd }: TimelineProps) {
   // Constants
   const PIXELS_PER_SECOND = 100;
   const ROW_HEIGHT = 40; // Taller rows for better visibility
@@ -53,14 +54,13 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote, onDele
     if (playbackTime > 0 && containerRef.current) {
       const cursorX = playbackTime * PIXELS_PER_SECOND;
       const containerWidth = containerRef.current.clientWidth;
-      const scrollLeft = containerRef.current.scrollLeft;
       
-      // If cursor is near the right edge or off-screen, scroll
-      if (cursorX > scrollLeft + containerWidth * 0.8) {
-        containerRef.current.scrollTo({ left: cursorX - containerWidth * 0.2, behavior: 'smooth' });
-      } else if (cursorX < scrollLeft) {
-        // If cursor jumps back (loop/restart)
-        containerRef.current.scrollTo({ left: cursorX - containerWidth * 0.2, behavior: 'smooth' });
+      // Keep the red playback line exactly in the middle of the screen 
+      // once it reaches the center, creating a smooth continuous scroll
+      if (cursorX > containerWidth / 2) {
+        containerRef.current.scrollLeft = cursorX - containerWidth / 2;
+      } else {
+        containerRef.current.scrollLeft = 0;
       }
     }
   }, [playbackTime]);
@@ -104,6 +104,9 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote, onDele
     };
 
     const handleMouseUp = () => {
+      if (resizingNoteId || draggingNoteId) {
+        if (onUpdateNoteEnd) onUpdateNoteEnd();
+      }
       setResizingNoteId(null);
       setDraggingNoteId(null);
     };
