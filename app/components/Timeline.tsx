@@ -5,12 +5,13 @@ import { getNoteColor, noteNameToMidi } from "../lib/audio/note-utils";
 interface TimelineProps {
   notes: Note[];
   playbackTime?: number;
+  isRecording?: boolean;
   onUpdateNote?: (id: string, updates: Partial<Note>) => void;
   onDeleteNote?: (id: string) => void;
   onUpdateNoteEnd?: () => void;
 }
 
-export default function Timeline({ notes, playbackTime = 0, onUpdateNote, onDeleteNote, onUpdateNoteEnd }: TimelineProps) {
+export default function Timeline({ notes, playbackTime = 0, isRecording = false, onUpdateNote, onDeleteNote, onUpdateNoteEnd }: TimelineProps) {
   // Constants
   const PIXELS_PER_SECOND = 100;
   const ROW_HEIGHT = 40; // Taller rows for better visibility
@@ -34,9 +35,9 @@ export default function Timeline({ notes, playbackTime = 0, onUpdateNote, onDele
   
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll when new notes are added
+  // Auto-scroll when new notes are added (only during recording)
   useEffect(() => {
-    if (notes.length > 0 && containerRef.current && playbackTime === 0) {
+    if (isRecording && notes.length > 0 && containerRef.current && playbackTime === 0) {
       const lastNote = notes[notes.length - 1];
       const noteX = (lastNote.startTime / 1000) * PIXELS_PER_SECOND;
       const containerWidth = containerRef.current.clientWidth;
