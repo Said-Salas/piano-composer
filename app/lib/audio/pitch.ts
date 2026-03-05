@@ -152,22 +152,16 @@ export class AudioPitchAnalyzer {
     // Now we do a second pass to find the fundamental
     for (let tau = 1; tau < halfSize - 1; tau++) {
        if (cmndf[tau] < cmndf[tau-1] && cmndf[tau] < cmndf[tau+1]) {
-           // If the dip is EXCELLENT, it is definitively the fundamental.
-           // We take it immediately to prevent deep subharmonics from stealing it.
-           if (cmndf[tau] < 0.08) {
+           // Calculate dynamic margin based on tau.
+           // High frequencies (small tau) have naturally shallower dips, so we allow a larger margin.
+           // Low frequencies (large tau) have strong harmonics, so we require a very strict margin.
+           let margin = Math.max(0.015, 0.08 * (1 - tau / 400));
+           let threshold = minCmndf + margin;
+
+           // Also require an absolute max of 0.25 to avoid picking pure noise
+           if (cmndf[tau] <= threshold && cmndf[tau] < 0.25) {
                tauEstimate = tau;
                break;
-           }
-           
-           // If the dip is GOOD, it might be the fundamental or a harmonic.
-           // We accept it only if it is reasonably close to the global minimum.
-           // This rejects weak harmonics (which are much worse than the true fundamental),
-           // but accepts slightly noisy fundamentals (which are only slightly worse than a subharmonic).
-           if (cmndf[tau] < 0.25) {
-               if (cmndf[tau] <= minCmndf + 0.08) {
-                   tauEstimate = tau;
-                   break;
-               }
            }
        }
     }
