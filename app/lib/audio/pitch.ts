@@ -149,30 +149,47 @@ export class AudioPitchAnalyzer {
         return { frequency: -1, clarity: 0 };
     }
 
-    // Now we do a second pass to find the fundamental
-    for (let tau = 1; tau < halfSize - 1; tau++) {
-       if (cmndf[tau] < cmndf[tau-1] && cmndf[tau] < cmndf[tau+1]) {
-           // Calculate dynamic margin based on tau.
-           // High frequencies (small tau) have naturally shallower dips, so we allow a larger margin.
-           // Low frequencies (large tau) have strong harmonics, so we require a very strict margin.
-           let margin = Math.max(0.015, 0.08 * (1 - tau / 400));
-           let threshold = minCmndf + margin;
+    let firstDip = -1;
+    let firstDipCmndf = Infinity;
+    
+    // Generous threshold to catch the very first fundamental, even if slightly noisy
+    let absoluteThreshold = isShortBuffer ? 0.35 : 0.25; 
 
-           // Also require an absolute max of 0.25 to avoid picking pure noise
-           if (cmndf[tau] <= threshold && cmndf[tau] < 0.25) {
-               tauEstimate = tau;
-               break;
-           }
-       }
+    for (let tau = 1; tau < halfSize - 1; tau++) {
+        if (cmndf[tau] < cmndf[tau-1] && cmndf[tau] < cmndf[tau+1]) {
+            if (cmndf[tau] < absoluteThreshold) {
+                firstDip = tau;
+                firstDipCmndf = cmndf[tau];
+                break;
+            }
+        }
     }
 
-    if (tauEstimate === -1) {
-      // Fallback to global minimum if it's reasonable
-      if (minCmndf < 0.25) {
-        tauEstimate = minTau;
-      } else {
-        return { frequency: -1, clarity: 0 };
-      }
+    if (firstDip !== -1) {
+        if (minTau > firstDip) {
+             let ratio = minTau / firstDip;
+             // Check if the global minimum is exactly 1 or 2 octaves below the first dip.
+             // Low piano strings have extremely strong 2nd and 4th harmonics. 
+             // If firstDip is the harmonic, minTau will be ~2.0x or ~4.0x larger.
+             let isOctave = Math.abs(ratio - 2.0) < 0.15;
+             let isDoubleOctave = Math.abs(ratio - 4.0) < 0.25;
+
+             // If it's an octave relationship, and the lower octave is significantly clearer
+             if ((isOctave || isDoubleOctave) && (minCmndf < firstDipCmndf * 0.6 || firstDipCmndf - minCmndf > 0.04)) {
+                 tauEstimate = minTau;
+             } else {
+                 tauEstimate = firstDip;
+             }
+        } else {
+             tauEstimate = firstDip;
+        }
+    } else {
+        // Fallback to global minimum if it's reasonable
+        if (minCmndf < 0.25) {
+            tauEstimate = minTau;
+        } else {
+            return { frequency: -1, clarity: 0 };
+        }
     }
 
     // 4. Parabolic interpolation for better precision

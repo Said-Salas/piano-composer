@@ -6,13 +6,13 @@ export class MonophonicNoteDetector {
   private stableNote: string | null = null;
   
   // Configuration
-  // Piano range is A0 (27.5Hz) to C8 (4186Hz)
-  private minFrequency: number = 27.5;
+  // Piano range is C1 (65.4Hz) to C8 (4186Hz)
+  private minFrequency: number = 63.0; // Slightly below C1 to allow slight detuning
   private maxFrequency: number = 4200;
   private minClarity: number = 0.3; 
   
-    // Consistency threshold prevents transient noises/typing from triggering fake notes
-    private consistencyThreshold: number = 4; // Increased to 4 to prevent harmonic flickering
+  // Consistency threshold prevents transient noises/typing from triggering fake notes
+  // We use a dynamic threshold now based on clarity to handle fast playing.
   
   // Debounce logic for note release
   private releaseCounter: number = 0;
@@ -56,7 +56,22 @@ export class MonophonicNoteDetector {
       this.candidateCount = 1;
     }
 
-    if (this.candidateCount >= this.consistencyThreshold) {
+    // DYNAMIC CONSISTENCY THRESHOLD:
+    // This makes the algorithm much smarter during fast, blurry playing (polyphony).
+    // When multiple keys ring together, they create a blurry sound wave with "false" pitches
+    // that jump around. Real, fresh key presses have high clarity.
+    // By requiring blurry signals to be stable for longer, we filter out the "crazy" errors.
+    let requiredConsistency = 5; // Default strict threshold for blurry/complex sounds (~80ms)
+    
+    if (clarity > 0.85) {
+      requiredConsistency = 2; // Very clear, fast detection (~30ms)
+    } else if (clarity > 0.70) {
+      requiredConsistency = 3; // Clear enough (~50ms)
+    } else if (clarity > 0.50) {
+      requiredConsistency = 4; // Getting blurry (~65ms)
+    }
+
+    if (this.candidateCount >= requiredConsistency) {
       // If we are switching notes, ensure we don't just flicker
       this.stableNote = note;
     }
